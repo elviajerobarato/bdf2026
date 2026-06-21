@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -11,15 +11,13 @@
 
     <aside class="w-64 bg-white border-r border-gray-200 h-full flex flex-col">
         <div class="p-6 font-bold text-xl border-b border-gray-200">Menú</div>
-        <nav class="flex-1 overflow-y-auto p-4 space-y-2 text-sm">
-            <button onclick="filterBy('Todos')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Todos</button>
-            <button onclick="filterBy('Full Pass')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Full Pass</button>
-            <button onclick="filterBy('Full Pass VIP')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Full Pass VIP</button>
-            <button onclick="filterBy('Bootcamp Alex Toledo')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Bootcamp Alex Toledo</button>
-            <button onclick="filterBy('Bootcamp Laura Moreno')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Bootcamp Laura Moreno</button>
-            <button onclick="filterBy('Másterclass Tania Cannarsa')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Másterclass Tania Cannarsa</button>
-            <button onclick="filterBy('Day Pass')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Day Pass</button>
-            <button onclick="filterBy('Night Pass')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Night Pass</button>
+        <nav class="flex-1 overflow-y-auto p-4 space-y-1 text-sm">
+            <button onclick="setFilter('Todos')" class="w-full text-left px-4 py-2 hover:bg-blue-50 rounded">Todos</button>
+            <button onclick="setFilter('Full pass BDF 2026')" class="w-full text-left px-4 py-2 hover:bg-blue-50 rounded">Full pass BDF 2026</button>
+            <button onclick="setFilter('Full pass VIP BDF 2026')" class="w-full text-left px-4 py-2 hover:bg-blue-50 rounded">Full pass VIP BDF 2026</button>
+            <button onclick="setFilter('Máster Class Tania Cannarsa')" class="w-full text-left px-4 py-2 hover:bg-blue-50 rounded">Máster Class Tania Cannarsa</button>
+            <button onclick="setFilter('Day Pass BDF 2026')" class="w-full text-left px-4 py-2 hover:bg-blue-50 rounded">Day Pass BDF 2026</button>
+            <button onclick="setFilter('Night Pass BDF 2026')" class="w-full text-left px-4 py-2 hover:bg-blue-50 rounded">Night Pass BDF 2026</button>
         </nav>
         <div class="p-4 border-t border-gray-200">
             <input type="file" id="fileInput" class="hidden" accept=".csv, .xlsx">
@@ -30,19 +28,19 @@
     <main class="flex-1 flex flex-col overflow-hidden">
         <header class="p-6 border-b border-gray-200 bg-white flex justify-between items-center">
             <h1 class="text-2xl font-bold">BDF 2026 Platform</h1>
-            <div id="connection-status" class="text-xs px-3 py-1 rounded-full font-medium bg-gray-100">Verificando...</div>
+            <input type="text" id="searchInput" placeholder="Buscar..." oninput="applyFilters()" class="border px-4 py-2 rounded w-64">
         </header>
 
         <section class="flex-1 overflow-auto p-6">
-            <table class="w-full text-left border-collapse bg-white shadow rounded">
-                <thead class="bg-gray-50 border-b">
-                    <tr class="text-xs uppercase text-gray-600">
-                        <th class="p-3">Pedido</th>
-                        <th class="p-3">Apellidos</th>
-                        <th class="p-3">Nombre</th>
-                        <th class="p-3">Producto</th>
-                        <th class="p-3">Cantidad</th>
-                        <th class="p-3">Retirado</th>
+            <table class="w-full bg-white shadow rounded border-collapse">
+                <thead class="bg-gray-50 sticky top-0">
+                    <tr>
+                        <th class="p-3 border text-xs uppercase">Pedido</th>
+                        <th class="p-3 border text-xs uppercase">Nombre</th>
+                        <th class="p-3 border text-xs uppercase">Producto</th>
+                        <th class="p-3 border text-xs uppercase">Propietario</th>
+                        <th class="p-3 border text-xs uppercase">Retirado</th>
+                        <th class="p-3 border text-xs uppercase">Fecha</th>
                     </tr>
                 </thead>
                 <tbody id="table-body"></tbody>
@@ -52,23 +50,55 @@
 
 <script>
     const SUPABASE_URL = 'https://rwicefkwtyjtqmsxmyrf.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3aWNlZmt3dHlqdHFtc3hteXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5ODE4MTMsImV4cCI6MjA5NzU1NzgxM30.ZaW3XtB7keXHCKUC4qdbraAle5c6USQV6krwL85JkiU';
+    const SUPABASE_KEY = localStorage.getItem('supabase_key') || prompt("Introduce tu API Key:");
+    localStorage.setItem('supabase_key', SUPABASE_KEY);
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
     let allData = [];
+    let currentFilter = 'Todos';
 
     async function init() {
-        try {
-            const { data, error } = await db.from('tickets').select('*');
-            if (error) throw error;
-            allData = data;
-            document.getElementById('connection-status').textContent = "● Conectado";
-            document.getElementById('connection-status').classList.add("bg-green-100", "text-green-700");
-            renderTable(allData);
-        } catch (e) {
-            console.error(e);
-            document.getElementById('connection-status').textContent = "● Error BD";
-            document.getElementById('connection-status').classList.add("bg-red-100", "text-red-700");
-        }
+        const { data, error } = await db.from('tickets').select('*');
+        if (error) { console.error("Error al cargar:", error); return; }
+        allData = data;
+        applyFilters();
+    }
+
+    function getVal(row, key) {
+        return row[key] || row[key + ' '] || row[' ' + key] || '';
+    }
+
+    async function toggleRetirado(id, isChecked) {
+        const fechaActual = isChecked ? new Date().toLocaleString("es-ES", {timeZone: "Europe/Madrid"}) : null;
+        await db.from('tickets').update({ retirado: isChecked, fecha_retirada: fechaActual }).eq('id', id);
+        init();
+    }
+
+    function setFilter(category) { currentFilter = category; applyFilters(); }
+
+    function applyFilters() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = allData.filter(item => {
+            const matchesCategory = (currentFilter === 'Todos' || (item.producto && item.producto.includes(currentFilter)));
+            return matchesCategory && (item.nombre?.toLowerCase().includes(searchTerm) || item.propietario_producto?.toLowerCase().includes(searchTerm));
+        });
+        renderTable(filtered);
+    }
+
+    function renderTable(data) {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = data.map(row => `
+            <tr class="border-b ${row.retirado ? 'bg-green-100' : 'hover:bg-gray-50'}">
+                <td class="p-3 border">${row.pedido_id || '-'}</td>
+                <td class="p-3 border">${row.nombre || ''} ${row.apellidos || ''}</td>
+                <td class="p-3 border">${row.producto || '-'}</td>
+                <td class="p-3 border text-sm">${row.propietario_producto || '-'}</td>
+                <td class="p-3 border text-center">
+                    <input type="checkbox" ${row.retirado ? 'checked' : ''} onchange="toggleRetirado(${row.id}, this.checked)">
+                </td>
+                <td class="p-3 border text-xs text-gray-500">${row.fecha_retirada || '-'}</td>
+            </tr>
+        `).join('');
     }
 
     document.getElementById('fileInput').addEventListener('change', async (e) => {
@@ -78,60 +108,47 @@
             const data = new Uint8Array(event.target.result);
             const workbook = XLSX.read(data, {type: 'array'});
             const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            
-            let datosParaSupabase = [];
+            const allInserts = [];
 
             rows.forEach(r => {
-                // Limpieza de cantidad (maneja el error del 1 1)
-                const cantRaw = String(r['Cantidad'] || '1');
-                const cantidad = parseInt(cantRaw.replace(/\D/g, '')) || 1;
+                const pedido = String(getVal(r, 'Nº de pedido'));
+                const bNombre = String(getVal(r, 'Nombre'));
+                const bApellidos = String(getVal(r, 'Apellidos'));
+                
+                // Dividimos productos por líneas
+                const productos = String(getVal(r, 'Producto')).split(/\r?\n/).filter(p => p.trim() !== "");
+                
+                // Dividimos variaciones (tickets) de forma flexible
+                const rawVariacion = String(getVal(r, 'Variación') || "");
+                const tickets = rawVariacion.split(/[\r\n|]+/).filter(t => t.trim() !== "");
 
-                for(let i = 0; i < cantidad; i++) {
-                    datosParaSupabase.push({
-                        pedido_id: String(r['Nº de pedido']),
-                        apellidos: r['Apellidos '] || '',
-                        nombre: r['Nombre '] || '',
-                        producto: r['Producto'] || '',
-                        cantidad: 1,
-                        retirado: false
+                // ITERAMOS SOBRE PRODUCTOS (esta es la cantidad real de filas que debe haber)
+                for (let i = 0; i < productos.length; i++) {
+                    // Si existe un ticket para este índice, lo usamos. Si no, usamos al comprador.
+                    const propietario = (tickets[i] && tickets[i].length > 3) ? tickets[i] : `${bNombre} ${bApellidos}`;
+                    
+                    allInserts.push({
+                        pedido_id: pedido,
+                        apellidos: bApellidos,
+                        nombre: bNombre,
+                        producto: productos[i],
+                        propietario_producto: propietario
                     });
                 }
             });
-
-            const { error } = await db.from('tickets').insert(datosParaSupabase);
             
+            // Subimos a Supabase
+            const { error } = await db.from('tickets').insert(allInserts);
             if(error) {
-                alert("ERROR al importar: " + error.message);
+                console.error(error);
+                alert("Error al guardar: " + error.message);
             } else {
-                alert("¡Éxito! Tickets cargados.");
+                alert("Importación exitosa. Se han creado " + allInserts.length + " filas.");
                 init();
             }
         };
         reader.readAsArrayBuffer(file);
     });
-
-    function renderTable(data) {
-        const tbody = document.getElementById('table-body');
-        tbody.innerHTML = '';
-        data.forEach(row => {
-            const tr = document.createElement('tr');
-            tr.className = "border-b hover:bg-gray-50 text-sm";
-            tr.innerHTML = `
-                <td class="p-3">${row.pedido_id || '-'}</td>
-                <td class="p-3">${row.apellidos || '-'}</td>
-                <td class="p-3">${row.nombre || '-'}</td>
-                <td class="p-3">${row.producto || '-'}</td>
-                <td class="p-3">${row.cantidad || '1'}</td>
-                <td class="p-3"><input type="checkbox" ${row.retirado ? 'checked' : ''}></td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function filterBy(producto) {
-        const filtered = producto === 'Todos' ? allData : allData.filter(r => r.producto === producto);
-        renderTable(filtered);
-    }
 
     init();
 </script>
