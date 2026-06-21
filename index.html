@@ -1,0 +1,139 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>BDF 2026 Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-100 font-sans h-screen flex">
+
+    <aside class="w-64 bg-white border-r border-gray-200 h-full flex flex-col">
+        <div class="p-6 font-bold text-xl border-b border-gray-200">Menú</div>
+        <nav class="flex-1 overflow-y-auto p-4 space-y-2 text-sm">
+            <button onclick="filterBy('Todos')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Todos</button>
+            <button onclick="filterBy('Full Pass')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Full Pass</button>
+            <button onclick="filterBy('Full Pass VIP')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Full Pass VIP</button>
+            <button onclick="filterBy('Bootcamp Alex Toledo')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Bootcamp Alex Toledo</button>
+            <button onclick="filterBy('Bootcamp Laura Moreno')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Bootcamp Laura Moreno</button>
+            <button onclick="filterBy('Másterclass Tania Cannarsa')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Másterclass Tania Cannarsa</button>
+            <button onclick="filterBy('Day Pass')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Day Pass</button>
+            <button onclick="filterBy('Night Pass')" class="w-full text-left px-4 py-2 hover:bg-blue-100 rounded">Night Pass</button>
+        </nav>
+        <div class="p-4 border-t border-gray-200">
+            <input type="file" id="fileInput" class="hidden" accept=".csv, .xlsx">
+            <button onclick="document.getElementById('fileInput').click()" class="w-full bg-blue-600 text-white py-2 rounded text-sm hover:bg-blue-700">Importar Excel/CSV</button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col overflow-hidden">
+        <header class="p-6 border-b border-gray-200 bg-white flex justify-between items-center">
+            <h1 class="text-2xl font-bold">BDF 2026 Platform</h1>
+            <div id="connection-status" class="text-xs px-3 py-1 rounded-full font-medium bg-gray-100">Verificando...</div>
+        </header>
+
+        <section class="flex-1 overflow-auto p-6">
+            <table class="w-full text-left border-collapse bg-white shadow rounded">
+                <thead class="bg-gray-50 border-b">
+                    <tr class="text-xs uppercase text-gray-600">
+                        <th class="p-3">Pedido</th>
+                        <th class="p-3">Apellidos</th>
+                        <th class="p-3">Nombre</th>
+                        <th class="p-3">Producto</th>
+                        <th class="p-3">Cantidad</th>
+                        <th class="p-3">Retirado</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </section>
+    </main>
+
+<script>
+    const SUPABASE_URL = 'https://rwicefkwtyjtqmsxmyrf.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3aWNlZmt3dHlqdHFtc3hteXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5ODE4MTMsImV4cCI6MjA5NzU1NzgxM30.ZaW3XtB7keXHCKUC4qdbraAle5c6USQV6krwL85JkiU';
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let allData = [];
+
+    async function init() {
+        try {
+            const { data, error } = await db.from('tickets').select('*');
+            if (error) throw error;
+            allData = data;
+            document.getElementById('connection-status').textContent = "● Conectado";
+            document.getElementById('connection-status').classList.add("bg-green-100", "text-green-700");
+            renderTable(allData);
+        } catch (e) {
+            console.error(e);
+            document.getElementById('connection-status').textContent = "● Error BD";
+            document.getElementById('connection-status').classList.add("bg-red-100", "text-red-700");
+        }
+    }
+
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const data = new Uint8Array(event.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            
+            let datosParaSupabase = [];
+
+            rows.forEach(r => {
+                // Limpieza de cantidad (maneja el error del 1 1)
+                const cantRaw = String(r['Cantidad'] || '1');
+                const cantidad = parseInt(cantRaw.replace(/\D/g, '')) || 1;
+
+                for(let i = 0; i < cantidad; i++) {
+                    datosParaSupabase.push({
+                        pedido_id: String(r['Nº de pedido']),
+                        apellidos: r['Apellidos '] || '',
+                        nombre: r['Nombre '] || '',
+                        producto: r['Producto'] || '',
+                        cantidad: 1,
+                        retirado: false
+                    });
+                }
+            });
+
+            const { error } = await db.from('tickets').insert(datosParaSupabase);
+            
+            if(error) {
+                alert("ERROR al importar: " + error.message);
+            } else {
+                alert("¡Éxito! Tickets cargados.");
+                init();
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    function renderTable(data) {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.className = "border-b hover:bg-gray-50 text-sm";
+            tr.innerHTML = `
+                <td class="p-3">${row.pedido_id || '-'}</td>
+                <td class="p-3">${row.apellidos || '-'}</td>
+                <td class="p-3">${row.nombre || '-'}</td>
+                <td class="p-3">${row.producto || '-'}</td>
+                <td class="p-3">${row.cantidad || '1'}</td>
+                <td class="p-3"><input type="checkbox" ${row.retirado ? 'checked' : ''}></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function filterBy(producto) {
+        const filtered = producto === 'Todos' ? allData : allData.filter(r => r.producto === producto);
+        renderTable(filtered);
+    }
+
+    init();
+</script>
+</body>
+</html>
