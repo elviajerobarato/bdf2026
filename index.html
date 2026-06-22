@@ -2,170 +2,283 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>BDF 2026 | Gestor de Pedidos</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Benidorm Dance Fest - Normalizador de Pedidos</title>
+    <!-- Cargamos SheetJS para gestionar archivos Excel desde el navegador -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #e11d48;
+            --primary-hover: #be123c;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 80vh;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+
+        h1 {
+            color: var(--text-color);
+            font-size: 24px;
+            margin-bottom: 10px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        p.subtitle {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .dropzone {
+            border: 2px dashed #cbd5e1;
+            padding: 40px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            background-color: #f1f5f9;
+            transition: all 0.3s ease;
+            margin-bottom: 25px;
+        }
+
+        .dropzone:hover {
+            border-color: var(--primary-color);
+            background-color: #fff1f2;
+        }
+
+        .dropzone p {
+            margin: 0;
+            font-size: 15px;
+            color: #475569;
+        }
+
+        .dropzone .icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        #status {
+            margin-top: 15px;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 10px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .status-success {
+            background-color: #dcfce7;
+            color: #15803d;
+            display: block !important;
+        }
+
+        .status-error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            display: block !important;
+        }
+
+        .status-loading {
+            background-color: #e0f2fe;
+            color: #0369a1;
+            display: block !important;
+        }
+
+        footer {
+            margin-top: 25px;
+            font-size: 11px;
+            color: #94a3b8;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 h-screen flex overflow-hidden">
+<body>
 
-    <aside class="w-80 bg-slate-900 text-white h-full flex flex-col shadow-xl">
-        <div class="p-6 text-xl font-bold border-b border-slate-700">BDF 2026 Panel</div>
-        
-        <nav class="flex-1 overflow-y-auto p-4 space-y-1 text-sm">
-            <button onclick="setFilter('Todos')" class="w-full text-left px-4 py-2 hover:bg-slate-700 rounded transition">Todos</button>
-            <button onclick="setFilter('Full pass BDF 2026')" class="w-full text-left px-4 py-2 hover:bg-slate-700 rounded">Full pass BDF 2026</button>
-            <button onclick="setFilter('Full pass VIP BDF 2026')" class="w-full text-left px-4 py-2 hover:bg-slate-700 rounded">Full pass VIP BDF 2026</button>
-            <button onclick="setFilter('BOOTCAMP Álex Toledo')" class="w-full text-left px-4 py-2 hover:bg-slate-700 rounded">BOOTCAMP Álex Toledo</button>
-            <button onclick="setFilter('BOOTCAMP Laura Moreno')" class="w-full text-left px-4 py-2 hover:bg-slate-700 rounded">BOOTCAMP Laura Moreno</button>
-            <button onclick="setFilter('Máster Class Tania Cannarsa')" class="w-full text-left px-4 py-2 hover:bg-slate-700 rounded">Máster Class Tania Cannarsa</button>
-        </nav>
-
-        <div class="p-4 border-t border-slate-700 bg-slate-800">
-            <h3 class="text-xs font-bold text-slate-400 uppercase mb-2">Configuración IA</h3>
-            <input type="password" id="geminiKey" placeholder="API Key" class="w-full bg-slate-900 border border-slate-600 p-2 rounded mb-2 text-sm text-white">
-            <button onclick="saveKey()" class="w-full bg-blue-600 hover:bg-blue-700 py-1.5 rounded text-xs font-bold uppercase transition">Guardar Key</button>
-            
-            <h3 class="text-xs font-bold text-slate-400 uppercase mt-4 mb-2">Importar Excel</h3>
-            <button onclick="document.getElementById('fileInput').click()" class="w-full bg-green-600 hover:bg-green-700 py-2 rounded text-xs font-bold uppercase transition">Seleccionar Archivo</button>
-            <input type="file" id="fileInput" class="hidden" accept=".xlsx, .csv">
-        </div>
-    </aside>
-
-    <main class="flex-1 flex flex-col p-6 overflow-hidden">
-        <header class="mb-6 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-slate-800">Listado de Registros</h1>
-            <input type="text" id="searchInput" placeholder="Buscar..." oninput="applyFilters()" class="border px-4 py-2 rounded-lg w-96 shadow-sm">
-        </header>
-
-        <section class="flex-1 overflow-auto bg-white shadow rounded-lg border">
-            <table class="w-full text-left border-collapse">
-                <thead class="bg-gray-100 sticky top-0 z-10 border-b">
-                    <tr class="text-slate-600 text-xs uppercase">
-                        <th class="p-3">Pedido</th>
-                        <th class="p-3">Nombre</th>
-                        <th class="p-3">Producto</th>
-                        <th class="p-3">Propietario</th>
-                        <th class="p-3 text-center">Cant.</th>
-                        <th class="p-3 text-center">Retirado</th>
-                        <th class="p-3">Fecha</th>
-                    </tr>
-                </thead>
-                <tbody id="table-body"></tbody>
-            </table>
-        </section>
-    </main>
+<div class="container">
+    <h1>BENIDORM DANCE FEST</h1>
+    <p class="subtitle">Normalizador de Pedidos para Administración & Backend</p>
+    
+    <!-- Zona de arrastre del archivo -->
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('excelFile').click()">
+        <span class="icon">📊</span>
+        <p><strong>Haz clic para seleccionar</strong> o arrastra el archivo <br><code>VENTAS BDF EXCEL HASTA 20626.xlsx</code></p>
+    </div>
+    
+    <input type="file" id="excelFile" accept=".xlsx, .xls">
+    
+    <div id="status"></div>
+    
+    <footer>Sincronización de campos y desglose automático de Tickets (Cantidad = 1)</footer>
+</div>
 
 <script>
-    // Configuración Supabase
-    const SUPABASE_URL = 'https://rwicefkwtyjtqmsxmyrf.supabase.co';
-    const SUPABASE_KEY = localStorage.getItem('supabase_key') || prompt("Introduce tu API Key de Supabase:");
-    if(SUPABASE_KEY) localStorage.setItem('supabase_key', SUPABASE_KEY);
-    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const fileInput = document.getElementById('excelFile');
+    const dropzone = document.getElementById('dropzone');
+    const statusDiv = document.getElementById('status');
 
-    let allData = [];
-    let currentFilter = 'Todos';
-    document.getElementById('geminiKey').value = localStorage.getItem('gemini_key') || '';
-
-    // Carga Inicial
-    async function init() {
-        const { data, error } = await db.from('tickets').select('*');
-        if (error) { console.error(error); return; }
-        allData = data || [];
-        applyFilters();
-    }
-
-    // Renderizado
-    function renderTable(data) {
-        const tbody = document.getElementById('table-body');
-        tbody.innerHTML = data.map(r => `
-            <tr class="border-b text-sm ${r.retirado ? 'bg-green-50' : ''}">
-                <td class="p-3">${r.pedido_id || '-'}</td>
-                <td class="p-3">${r.nombre || ''} ${r.apellidos || ''}</td>
-                <td class="p-3">${r.producto || '-'}</td>
-                <td class="p-3 font-medium text-blue-900">${r.propietario_producto || r.propietario || '-'}</td>
-                <td class="p-3 text-center">${r.cantidad || '1'}</td>
-                <td class="p-3 text-center">
-                    <input type="checkbox" ${r.retirado ? 'checked' : ''} onchange="toggleRetirado(${r.id}, this.checked)">
-                </td>
-                <td class="p-3 text-gray-500 text-xs">${r.fecha_retirada || '-'}</td>
-            </tr>
-        `).join('');
-    }
-
-    // Lógica Retirado
-    async function toggleRetirado(id, isChecked) {
-        const fecha = isChecked ? new Date().toLocaleString("es-ES") : null;
-        const { error } = await db.from('tickets')
-            .update({ retirado: isChecked, fecha_retirada: fecha })
-            .eq('id', id);
-        
-        if (error) alert("Error: " + error.message);
-        else init(); 
-    }
-
-    // Filtros
-    function setFilter(cat) { currentFilter = cat; applyFilters(); }
-
-    function applyFilters() {
-        const term = document.getElementById('searchInput').value.toLowerCase();
-        const filtered = allData.filter(i => {
-            const matchesCat = (currentFilter === 'Todos' || (i.producto && i.producto.includes(currentFilter)));
-            const matchesSearch = (
-                (i.nombre?.toLowerCase().includes(term)) || 
-                (i.propietario_producto?.toLowerCase().includes(term)) ||
-                (i.propietario?.toLowerCase().includes(term)) ||
-                (i.pedido_id?.toString().includes(term))
-            );
-            return matchesCat && matchesSearch;
-        });
-        renderTable(filtered);
-    }
-
-    // Importación IA
-    document.getElementById('fileInput').addEventListener('change', async (e) => {
-        const apiKey = localStorage.getItem('gemini_key');
-        if(!apiKey) return alert("Configura tu API Key de Gemini primero.");
-        
-        const file = e.target.files[0];
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-            alert("Analizando archivo...");
-            const data = new Uint8Array(ev.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            
-            try {
-                const prompt = `Analiza estos datos. Devuelve un JSON con estas llaves exactas: 
-                pedido_id, nombre, apellidos, producto, cantidad, propietario.
-                Datos: ${JSON.stringify(rows)}`;
-
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
-                
-                const result = await response.json();
-                const jsonText = result.candidates[0].content.parts[0].text.replace(/```json|```/g, '');
-                const cleanData = JSON.parse(jsonText);
-                
-                const { error } = await db.from('tickets').insert(cleanData);
-                if(error) throw error;
-                
-                alert("Importado con éxito.");
-                init();
-            } catch(e) { console.error(e); alert("Error al procesar. Revisa la consola."); }
-        };
-        reader.readAsArrayBuffer(file);
+    // Gestión de eventos de arrastrar y soltar
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.style.borderColor = 'var(--primary-color)'; });
+    dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = '#cbd5e1'; });
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.style.borderColor = '#cbd5e1';
+        if (e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            procesarExcel(e.dataTransfer.files[0]);
+        }
     });
 
-    function saveKey() {
-        localStorage.setItem('gemini_key', document.getElementById('geminiKey').value);
-        alert("Key guardada.");
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            procesarExcel(e.target.files[0]);
+        }
+    });
+
+    function mostrarStatus(mensaje, tipo) {
+        statusDiv.className = '';
+        if (tipo === 'success') statusDiv.classList.add('status-success');
+        if (tipo === 'error') statusDiv.classList.add('status-error');
+        if (tipo === 'loading') statusDiv.classList.add('status-loading');
+        statusDiv.innerText = mensaje;
     }
 
-    init();
+    function procesarExcel(file) {
+        mostrarStatus("Leyendo y procesando el fichero original...", "loading");
+        
+        const reader = new FileReader();
+        reader.onerror = () => mostrarStatus("Error al leer el archivo físico.", "error");
+        
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                // Seleccionar la hoja correcta ('Pedidos' o la primera que encuentre)
+                const sheetName = workbook.SheetNames.includes('Pedidos') ? 'Pedidos' : workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                
+                // Convertir a formato JSON matricial
+                const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                
+                if (rows.length === 0) {
+                    mostrarStatus("El archivo Excel está vacío.", "error");
+                    return;
+                }
+
+                // Detectar nombres de columnas limpiando espacios rebeldes
+                const originalKeys = Object.keys(rows[0]);
+                const keyMap = {};
+                originalKeys.forEach(k => { keyMap[k.trim()] = k; });
+
+                const colPedido = keyMap['Nº de pedido'] || originalKeys[0];
+                const colApellidos = keyMap['Apellidos'] || originalKeys[1];
+                const colNombre = keyMap['Nombre'] || originalKeys[2];
+                const colProducto = keyMap['Producto'] || originalKeys[3];
+                const colVariacion = keyMap['Variación'] || originalKeys[5] || 'Variación';
+
+                const flatRows = [];
+
+                // Lógica de desglose relacional
+                rows.forEach(row => {
+                    const pedido = String(row[colPedido] || "").trim();
+                    const apellidos = String(row[colApellidos] || "").trim();
+                    const nombre = String(row[colNombre] || "").trim();
+                    const producto = String(row[colProducto] || "").trim();
+                    const variacionFull = String(row[colVariacion] || "").trim();
+
+                    if (!pedido && !variacionFull) return; // Fila vacía
+
+                    if (!variacionFull || variacionFull.toLowerCase() === "nan") {
+                        flatRows.push({
+                            'Nº de pedido': pedido, 'Apellidos': apellidos, 'Nombre': nombre,
+                            'Producto': producto, 'Cantidad': 1, 'Propietario_producto': ""
+                        });
+                        return;
+                    }
+
+                    // Separar por saltos de línea (\n)
+                    const lineas = variacionFull.split('\n').map(l => l.trim()).filter(l => l);
+
+                    lineas.forEach(linea => {
+                        // Separar por tuberías (|)
+                        const partes = linea.split('|').map(p => p.trim()).filter(p => p);
+                        
+                        let ticketsEnLinea = [];
+                        let prefijoExtra = "";
+
+                        partes.forEach(p => {
+                            if (p.includes("Ticket")) {
+                                ticketsEnLinea.push(prefijoExtra + p);
+                            } else {
+                                prefijoExtra += p + " | ";
+                            }
+                        });
+
+                        if (ticketsEnLinea.length === 0) {
+                            let valFinal = prefijoExtra.endsWith(" | ") ? prefijoExtra.slice(0, -3) : linea;
+                            flatRows.push({
+                                'Nº de pedido': pedido, 'Apellidos': apellidos, 'Nombre': nombre,
+                                'Producto': producto, 'Cantidad': 1, 'Propietario_producto': valFinal
+                            });
+                        } else {
+                            ticketsEnLinea.forEach(t => {
+                                flatRows.push({
+                                    'Nº de pedido': pedido, 'Apellidos': apellidos, 'Nombre': nombre,
+                                    'Producto': producto, 'Cantidad': 1, 'Propietario_producto': t
+                                });
+                            });
+                        }
+                    });
+                });
+
+                // Crear nueva hoja de cálculo con los datos desglosados
+                const newWorksheet = XLSX.utils.json_to_sheet(flatRows, {
+                    header: ['Nº de pedido', 'Apellidos', 'Nombre', 'Producto', 'Cantidad', 'Propietario_producto']
+                });
+                
+                const newWorkbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, 'Pedidos Normalizados');
+                
+                // Forzar la descarga automática del archivo limpio
+                XLSX.writeFile(newWorkbook, 'VENTAS_BDF_COMPLETO_NORMALIZADO.xlsx');
+                
+                mostrarStatus(`¡Éxito! Generadas ${flatRows.length} filas normalizadas con Cantidad = 1. Descarga completada.`, "success");
+
+            } catch (error) {
+                console.error(error);
+                mostrarStatus("Error crítico al procesar la estructura del Excel: " + error.message, "error");
+            }
+        };
+
+        reader.readAsArrayBuffer(file);
+    }
 </script>
+
 </body>
 </html>
