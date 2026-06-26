@@ -1,0 +1,466 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BDF 2026 | Gestor de Tickets Directo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-50 h-screen overflow-hidden font-sans">
+
+    <div id="app" class="h-full flex relative">
+
+        <aside :class="[isSidebarOpen ? 'w-80 shadow-2xl translate-x-0' : 'w-0 -translate-x-full lg:w-0 lg:-translate-x-full', 'bg-slate-900 text-white h-full flex flex-col transition-all duration-300 ease-in-out z-30 flex-shrink-0 absolute lg:relative']">
+            
+            <div class="p-5 flex justify-between items-center border-b border-slate-700 bg-slate-950">
+                <div class="flex items-center space-x-3">
+                    <i class="fa-solid fa-ticket-simple text-blue-400 text-xl"></i>
+                    <span class="text-lg font-bold tracking-wider">BDF 2026 PANEL</span>
+                </div>
+                <button @click="isSidebarOpen = false" class="text-slate-400 hover:text-white transition lg:hidden">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <nav class="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 mb-2 flex items-center justify-between">
+                    <span>Filtrar por Producto</span>
+                    <span class="bg-slate-800 text-slate-300 text-[10px] px-2 py-0.5 rounded-full">{{ totalRegistros }}</span>
+                </div>
+                
+                <button v-for="cat in categorias" 
+                        :key="cat"
+                        @click="currentFilter = cat"
+                        :class="[currentFilter === cat ? 'bg-blue-600 text-white font-medium shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white', 'w-full text-left px-3 py-2 rounded-lg text-sm transition flex items-center justify-between group']">
+                    <span class="truncate pr-2">{{ cat }}</span>
+                    <i class="fa-solid fa-chevron-right text-[10px] opacity-0 group-hover:opacity-100 transition"></i>
+                </button>
+            </nav>
+
+            <div class="p-4 border-t border-slate-700 bg-slate-950">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center space-x-1.5">
+                    <i class="fa-solid fa-file-excel text-emerald-400"></i>
+                    <span>Importación fichero XLSX</span>
+                </div>
+                
+                <div @dragover.prevent="isDragging = true"
+                     @dragleave.prevent="isDragging = false"
+                     @drop.prevent="handleDrop"
+                     :class="[isDragging ? 'border-blue-500 bg-slate-800/50' : 'border-slate-600 bg-slate-900/40', 'border-2 border-dashed rounded-xl p-4 text-center cursor-pointer hover:border-slate-500 transition relative group']"
+                     @click="triggerFileInput">
+                    
+                    <input type="file" id="fileInput" class="hidden" accept=".xlsx, .csv" @change="handleFileSelect">
+                    
+                    <div v-if="!isImporting" class="space-y-1">
+                        <i class="fa-solid fa-cloud-arrow-up text-slate-400 group-hover:text-slate-200 text-xl transition"></i>
+                        <p class="text-xs text-slate-300 font-medium">Arrastra tu archivo .xlsx aquí</p>
+                        <p class="text-[10px] text-slate-500">Mapeo estricto de columna "Nº de pedido"</p>
+                    </div>
+
+                    <div v-else class="space-y-2 py-1">
+                        <i class="fa-solid fa-circle-notch fa-spin text-blue-400 text-xl"></i>
+                        <p class="text-xs text-blue-300 font-medium animate-pulse">{{ importStatusText }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-3 flex items-center justify-between text-[11px] px-1">
+                    <span class="text-slate-400 flex items-center space-x-1">
+                        <i class="fa-solid fa-database text-[10px]"></i>
+                        <span>Supabase:</span>
+                    </span>
+                    <span :class="supabaseConnected ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'" class="flex items-center space-x-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
+                        <span>{{ supabaseConnected ? 'Conectado' : 'Desconectado' }}</span>
+                    </span>
+                </div>
+            </div>
+        </aside>
+
+        <button v-if="!isSidebarOpen" 
+                @click="isSidebarOpen = true" 
+                class="absolute bottom-6 left-6 bg-slate-900 text-white p-3 rounded-full shadow-2xl hover:bg-slate-800 transition z-40 border border-slate-700">
+            <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+
+        <main class="flex-1 flex flex-col bg-white h-full overflow-hidden">
+            
+            <header class="p-4 md:p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 bg-white">
+                <div class="flex items-center space-x-3">
+                    <button @click="isSidebarOpen = !isSidebarOpen" class="hidden lg:block text-slate-500 hover:text-slate-800 transition">
+                        <i class="fa-solid fa-sidebar text-xl"></i>
+                    </button>
+                    <div>
+                        <h1 class="text-xl md:text-2xl font-bold text-slate-800">Listado de Registros</h1>
+                        <p class="text-xs text-slate-500">Filtros nativos en tiempo real con base de datos en Supabase</p>
+                    </div>
+                </div>
+                
+                <div class="w-full sm:w-auto relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-400 text-sm"></i>
+                    <input type="text" 
+                           v-model="searchQuery" 
+                           placeholder="Buscar por pedido, nombre, DNI, producto..." 
+                           class="w-full sm:w-80 md:w-96 pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition shadow-sm">
+                    <button v-if="searchQuery" @click="searchQuery = ''" class="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
+                        <i class="fa-solid fa-circle-xmark text-xs"></i>
+                    </button>
+                </div>
+            </header>
+
+            <section class="flex-1 overflow-auto p-4 md:p-6 custom-scrollbar bg-white">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11px] uppercase tracking-wider font-semibold">
+                                <th class="p-4 w-28">Nº Pedido</th>
+                                <th class="p-4">Nombre Completo</th>
+                                <th class="p-4">Producto</th>
+                                <th class="p-4">Propietario Final / DNI</th>
+                                <th class="p-4 text-center w-16">Cant.</th>
+                                <th class="p-4 text-center w-24">Retirado</th>
+                                <th class="p-4 w-44">Fecha Retirada</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-sm">
+                            <tr v-for="row in filteredData" 
+                                :key="row.id" 
+                                :class="[row.retirado ? 'bg-green-100 text-green-950 font-medium' : 'bg-white text-slate-700 hover:bg-slate-50/80', 'transition-colors duration-150']">
+                                
+                                <td class="p-4 font-mono text-xs font-bold tracking-wider">
+                                    {{ row.pedido_id || '-' }}
+                                </td>
+                                
+                                <td class="p-4">
+                                    <div class="font-bold">{{ row.nombre }} {{ row.apellidos }}</div>
+                                </td>
+                                
+                                <td class="p-4">
+                                    <span :class="getProductBadgeClass(row.producto, row.retirado)" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border">
+                                        {{ row.producto || '-' }}
+                                    </span>
+                                </td>
+                                
+                                <td class="p-4 font-semibold" :class="row.retirado ? 'text-green-900' : 'text-blue-900'">
+                                    {{ row.propietario || '-' }}
+                                </td>
+                                
+                                <td class="p-4 text-center font-bold">
+                                    {{ row.cantidad || 1 }}
+                                </td>
+                                
+                                <td class="p-4 text-center">
+                                    <label class="inline-flex relative items-center cursor-pointer justify-center">
+                                        <input type="checkbox" 
+                                               :checked="row.retirado" 
+                                               @change="toggleRetirado(row.id, $event.target.checked)"
+                                               class="sr-only peer">
+                                        <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                                    </label>
+                                </td>
+                                
+                                <td class="p-4 text-xs font-mono">
+                                    <div v-if="row.retirado" class="flex items-center space-x-1.5 text-emerald-800 font-bold">
+                                        <i class="fa-solid fa-calendar-check text-[11px]"></i>
+                                        <span>{{ row.fecha_retirada }}</span>
+                                    </div>
+                                    <span v-else class="text-slate-300">—</span>
+                                </td>
+                            </tr>
+                            
+                            <tr v-if="filteredData.length === 0">
+                                <td colspan="7" class="p-12 text-center text-slate-400 bg-white">
+                                    <i class="fa-solid fa-folder-open text-3xl mb-2 text-slate-300 block"></i>
+                                    <span class="text-sm font-medium">No se han encontrado registros en esta categoría o búsqueda.</span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const SUPABASE_URL = 'https://rwicefkwtyjtqmsxmyrf.supabase.co';
+                const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ3aWNlZmt3dHlqdHFtc3hteXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5ODE4MTMsImV4cCI6MjA5NzU1NzgxM30.ZaW3XtB7keXHCKUC4qdbraAle5c6USQV6krwL85JkiU';
+                
+                let supabaseClient = null;
+
+                const allData = ref([]);
+                const searchQuery = ref('');
+                const currentFilter = ref('Todos');
+                const isSidebarOpen = ref(true);
+                const isDragging = ref(false);
+                const isImporting = ref(false);
+                const importStatusText = ref('');
+                const supabaseConnected = ref(false);
+
+                const categoriesList = [
+                    'Todos',
+                    'Full pass BDF 2026',
+                    'Full pass VIP BDF 2026',
+                    'BOOTCAMP Álex Toledo',
+                    'BOOTCAMP Laura Moreno',
+                    'Máster Class Tania Cannarsa',
+                    'Day Pass BDF 2026',
+                    'Night Pass BDF 2026',
+                    'Entrada a School Salsa Stars'
+                ];
+
+                const initSupabase = async () => {
+                    try {
+                        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                        const { data, error } = await supabaseClient.from('tickets').select('id').limit(1);
+                        if (error) throw error;
+                        supabaseConnected.value = true;
+                    } catch (err) {
+                        console.error("Fallo de conexión Supabase:", err);
+                        supabaseConnected.value = false;
+                    }
+                };
+
+                const fetchDatabase = async () => {
+                    if (!supabaseClient) return;
+                    const { data, error } = await supabaseClient
+                        .from('tickets')
+                        .select('*')
+                        .order('pedido_id', { ascending: true });
+                    
+                    if (!error && data) {
+                        allData.value = data;
+                    }
+                };
+
+                const toggleRetirado = async (id, isChecked) => {
+                    const timestamp = isChecked ? new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" }) : null;
+                    
+                    const index = allData.value.findIndex(item => item.id === id);
+                    if (index !== -1) {
+                        allData.value[index].retirado = isChecked;
+                        allData.value[index].fecha_retirada = timestamp;
+                    }
+
+                    const { error } = await supabaseClient
+                        .from('tickets')
+                        .update({ retirado: isChecked, fecha_retirada: timestamp })
+                        .eq('id', id);
+
+                    if (error) {
+                        alert("Error al actualizar estado en Supabase: " + error.message);
+                        fetchDatabase();
+                    }
+                };
+
+                const filteredData = computed(() => {
+                    return allData.value.filter(item => {
+                        const matchProduct = currentFilter.value === 'Todos' || 
+                            (item.producto && item.producto.toLowerCase().includes(currentFilter.value.toLowerCase()));
+                        
+                        const term = searchQuery.value.toLowerCase().trim();
+                        const matchSearch = !term || (
+                            (item.pedido_id && item.pedido_id.toLowerCase().includes(term)) ||
+                            (item.nombre && item.nombre.toLowerCase().includes(term)) ||
+                            (item.apellidos && item.apellidos.toLowerCase().includes(term)) ||
+                            (item.producto && item.producto.toLowerCase().includes(term)) ||
+                            (item.propietario && item.propietario.toLowerCase().includes(term))
+                        );
+
+                        return matchProduct && matchSearch;
+                    });
+                });
+
+                const totalRegistros = computed(() => allData.value.length);
+
+                const triggerFileInput = () => {
+                    if (!isImporting.value) document.getElementById('fileInput').click();
+                };
+
+                const handleFileSelect = (e) => {
+                    if (e.target.files.length) processExcel(e.target.files[0]);
+                };
+
+                const handleDrop = (e) => {
+                    isDragging.value = false;
+                    const files = e.dataTransfer.files;
+                    if (files.length) processExcel(files[0]);
+                };
+
+                // PARSER LOCAL OPTIMIZADO PARA DETECTAR CORRECCIONES
+                const processExcel = async (file) => {
+                    isImporting.value = true;
+                    importStatusText.value = "Leyendo Excel nativo...";
+
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const data = new Uint8Array(e.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                            const rawRows = XLSX.utils.sheet_to_json(sheet);
+
+                            if (rawRows.length === 0) throw new Error("El archivo Excel está vacío.");
+
+                            importStatusText.value = "Mapeando registros locales...";
+
+                            const cleanedPayload = rawRows.map(row => {
+                                // Buscador helper inteligente y tolerante
+                                const findValue = (possibleKeys, fallbackKeyword = null) => {
+                                    // 1. Coincidencia exacta o normalizada
+                                    let key = Object.keys(row).find(k => {
+                                        const cleanK = k.toLowerCase().trim();
+                                        return possibleKeys.map(pk => pk.toLowerCase().trim()).includes(cleanK) ||
+                                               possibleKeys.map(pk => pk.toLowerCase().trim().replace(/[\s_º]/g, '')).includes(cleanK.replace(/[\s_º]/g, ''));
+                                    });
+                                    
+                                    // 2. Coincidencia por palabra clave secundaria
+                                    if (!key && fallbackKeyword) {
+                                        key = Object.keys(row).find(k => {
+                                            const cleanK = k.toLowerCase().trim();
+                                            return cleanK.includes(fallbackKeyword) && !cleanK.includes('propietario');
+                                        });
+                                    }
+                                    return key ? row[key] : null;
+                                };
+
+                                // Captura estricta priorizando "Nº de pedido"
+                                const pedido_id = findValue(['nº de pedido', 'nºpedido', 'pedido', 'pedidoid', 'nºdepedido'], 'pedido');
+                                const apellidos = findValue(['apellidos', 'apellido']);
+                                const nombre = findValue(['nombre']);
+                                const producto = findValue(['producto']);
+                                const cantidad = parseInt(findValue(['cantidad'])) || 1;
+                                const propietario_producto = findValue(['propietarioproducto', 'propietario_producto']);
+
+                                let propietarioLimpio = '-';
+                                if (propietario_producto) {
+                                    let textStr = String(propietario_producto).trim();
+                                    const ticketMatchIndex = textStr.search(/Ticket\d+/i);
+                                    if (ticketMatchIndex !== -1) {
+                                        textStr = textStr.substring(ticketMatchIndex);
+                                    }
+
+                                    propietarioLimpio = textStr
+                                        .replace(/Ticket\d+:\s*Nombre:\s*/i, '')
+                                        .replace(/Apell+ido:\s*/i, ' ')
+                                        .replace(/(?:DNI|Passport|DNI[-\s/]*Passport)[-\s/]*:\s*/i, ' - ')
+                                        .trim();
+                                }
+
+                                return {
+                                    pedido_id: pedido_id ? String(pedido_id).trim() : null,
+                                    nombre: nombre ? String(nombre).trim() : null,
+                                    apellidos: apellidos ? String(apellidos).trim() : null,
+                                    producto: producto ? String(producto).trim() : null,
+                                    cantidad: cantidad,
+                                    propietario_producto: propietario_producto ? String(propietario_producto).trim() : null,
+                                    propietario: propietarioLimpio,
+                                    retirado: false,
+                                    fecha_retirada: null
+                                };
+                            });
+
+                            // --- CHECK DE LINEAS ABSOLUTAMENTE DUPLICADAS ---
+                            importStatusText.value = "Depurando duplicados...";
+                            const uniquePayload = [];
+                            const seenRows = new Set();
+
+                            for (const item of cleanedPayload) {
+                                // Serializamos las propiedades clave para comprobar si la línea es 100% idéntica
+                                const uniqueStringId = JSON.stringify({
+                                    p: item.pedido_id,
+                                    n: item.nombre,
+                                    a: item.apellidos,
+                                    pr: item.producto,
+                                    c: item.cantidad,
+                                    pp: item.propietario_producto
+                                });
+
+                                if (!seenRows.has(uniqueStringId)) {
+                                    seenRows.add(uniqueStringId);
+                                    uniquePayload.push(item);
+                                }
+                            }
+
+                            const duplicadosEliminados = cleanedPayload.length - uniquePayload.length;
+                            // ------------------------------------------------
+
+                            importStatusText.value = "Insertando en Supabase...";
+
+                            // Inserción de las líneas únicas filtradas
+                            const { error: insertError } = await supabaseClient.from('tickets').insert(uniquePayload);
+                            if (insertError) throw insertError;
+
+                            if (duplicadosEliminados > 0) {
+                                alert(`¡Éxito! Se han importado ${uniquePayload.length} registros únicos. Se detectaron y eliminaron ${duplicadosEliminados} líneas absolutamente duplicadas.`);
+                            } else {
+                                alert(`¡Éxito! Se han importado correctamente ${uniquePayload.length} registros sin incidencias.`);
+                            }
+                            
+                            await fetchDatabase();
+
+                        } catch (err) {
+                            console.error(err);
+                            alert("Error en la importación: " + err.message);
+                        } finally {
+                            isImporting.value = false;
+                            importStatusText.value = "";
+                            document.getElementById('fileInput').value = "";
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                };
+
+                const getProductBadgeClass = (prod, isRetirado) => {
+                    if (isRetirado) return 'bg-white/90 text-green-950 border-green-300';
+                    if (!prod) return 'bg-slate-100 text-slate-700 border-slate-200';
+                    const text = prod.toLowerCase();
+                    if (text.includes('vip')) return 'bg-amber-50 text-amber-700 border-amber-200';
+                    if (text.includes('bootcamp')) return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                    if (text.includes('master class')) return 'bg-purple-50 text-purple-700 border-purple-200';
+                    if (text.includes('full pass')) return 'bg-blue-50 text-blue-700 border-blue-200';
+                    return 'bg-slate-50 text-slate-700 border-slate-200';
+                };
+
+                onMounted(async () => {
+                    await initSupabase();
+                    await fetchDatabase();
+                    if (window.innerWidth < 1024) isSidebarOpen.value = false;
+                });
+
+                return {
+                    allData,
+                    searchQuery,
+                    currentFilter,
+                    categorias: categoriesList,
+                    isSidebarOpen,
+                    isDragging,
+                    isImporting,
+                    importStatusText,
+                    supabaseConnected,
+                    filteredData,
+                    totalRegistros,
+                    toggleRetirado,
+                    triggerFileInput,
+                    handleFileSelect,
+                    handleDrop,
+                    getProductBadgeClass
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
