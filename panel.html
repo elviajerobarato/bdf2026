@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -120,6 +120,7 @@
                                 <th class="p-4">Nombre Completo</th>
                                 <th class="p-4">Producto</th>
                                 <th class="p-4">Propietario Final / DNI</th>
+                                <th class="p-4 text-center w-24">Asiento</th>
                                 <th class="p-4 text-center w-16">Cant.</th>
                                 <th class="p-4 text-center w-24">Retirado</th>
                                 <th class="p-4 w-44">Fecha Retirada</th>
@@ -147,6 +148,13 @@
                                 <td class="p-4 font-semibold" :class="row.retirado ? 'text-green-900' : 'text-blue-900'">
                                     {{ row.propietario || '-' }}
                                 </td>
+
+                                <td class="p-4 text-center font-mono text-xs font-bold">
+                                    <span v-if="row.producto === 'Full pass VIP BDF 2026'" :class="row.retirado ? 'bg-white/80 text-green-950 border-green-300' : 'bg-amber-50 text-amber-800 border-amber-200'" class="inline-block px-2.5 py-1 rounded border shadow-sm">
+                                        {{ row.asiento || '—' }}
+                                    </span>
+                                    <span v-else class="text-slate-300">—</span>
+                                </td>
                                 
                                 <td class="p-4 text-center font-bold">
                                     {{ row.cantidad || 1 }}
@@ -172,7 +180,7 @@
                             </tr>
                             
                             <tr v-if="filteredData.length === 0">
-                                <td colspan="7" class="p-12 text-center text-slate-400 bg-white">
+                                <td colspan="8" class="p-12 text-center text-slate-400 bg-white">
                                     <i class="fa-solid fa-folder-open text-3xl mb-2 text-slate-300 block"></i>
                                     <span class="text-sm font-medium">No se han encontrado registros en esta categoría o búsqueda.</span>
                                 </td>
@@ -277,7 +285,8 @@
                             (item.nombre && item.nombre.toLowerCase().includes(term)) ||
                             (item.apellidos && item.apellidos.toLowerCase().includes(term)) ||
                             (item.producto && item.producto.toLowerCase().includes(term)) ||
-                            (item.propietario && item.propietario.toLowerCase().includes(term))
+                            (item.propietario && item.propietario.toLowerCase().includes(term)) ||
+                            (item.asiento && item.asiento.toLowerCase().includes(term))
                         );
 
                         return matchProduct && matchSearch;
@@ -337,13 +346,14 @@
                                     return key ? row[key] : null;
                                 };
 
-                                // Captura estricta priorizando "Nº de pedido"
+                                // Captura estricta priorizando "Nº de pedido" e incluyendo "Asiento"
                                 const pedido_id = findValue(['nº de pedido', 'nºpedido', 'pedido', 'pedidoid', 'nºdepedido'], 'pedido');
                                 const apellidos = findValue(['apellidos', 'apellido']);
                                 const nombre = findValue(['nombre']);
                                 const producto = findValue(['producto']);
                                 const cantidad = parseInt(findValue(['cantidad'])) || 1;
                                 const propietario_producto = findValue(['propietarioproducto', 'propietario_producto']);
+                                const asiento = findValue(['asiento', 'asientos', 'butaca', 'fila']);
 
                                 let propietarioLimpio = '-';
                                 if (propietario_producto) {
@@ -368,6 +378,7 @@
                                     cantidad: cantidad,
                                     propietario_producto: propietario_producto ? String(propietario_producto).trim() : null,
                                     propietario: propietarioLimpio,
+                                    asiento: asiento ? String(asiento).trim() : null,
                                     retirado: false,
                                     fecha_retirada: null
                                 };
@@ -379,14 +390,15 @@
                             const seenRows = new Set();
 
                             for (const item of cleanedPayload) {
-                                // Serializamos las propiedades clave para comprobar si la línea es 100% idéntica
+                                // Serializamos las propiedades clave incluyendo asiento para comprobar si la línea es 100% idéntica
                                 const uniqueStringId = JSON.stringify({
                                     p: item.pedido_id,
                                     n: item.nombre,
                                     a: item.apellidos,
                                     pr: item.producto,
                                     c: item.cantidad,
-                                    pp: item.propietario_producto
+                                    pp: item.propietario_producto,
+                                    as: item.asiento
                                 });
 
                                 if (!seenRows.has(uniqueStringId)) {
